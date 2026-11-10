@@ -1,0 +1,22 @@
+//decoder_abc.v
+module decoder_abc (
+    input [1:0] count,
+    output sel_a, sel_b, sel_c
+);
+    wire countN0, countN1;
+
+    not (countN0, count[0]);
+    not (countN1, count[1]);
+
+    // (count = 00)
+    and (sel_a, countN1, countN0);
+
+    // (count = 01)
+    and (sel_b, countN1, count[0]);
+
+    // (count = 10)
+    and (sel_c, count[1], countN0);
+
+    and (sel_d, count[1], count[0]);
+	 
+endmodule
