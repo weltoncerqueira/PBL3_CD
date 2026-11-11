@@ -11,7 +11,7 @@ module desenha_eixo_cartesiano (
     wire area_visivel;
     wire p_tick;
 
-    // 1. Instancia do "motor" VGA
+    // 1. Instância do "motor" VGA
     vga_sync meu_vga (
         .clk(clk), 
         .reset(~btn_reset), 
@@ -24,9 +24,6 @@ module desenha_eixo_cartesiano (
     );
 
     // 2. Definição dos Estados da FSM
-    // ST_BLANK: Fora da área visível (por exemplo, durante o Back/Front Porch ou Blanking)
-    // ST_FUNDO: Na área visível, pintando o fundo
-    // ST_EIXO: Na área visível, exatamente nas coordenadas dos eixos (X=320 ou Y=240)
     localparam [1:0] 
         ST_BLANK = 2'b00,
         ST_FUNDO = 2'b01,
@@ -34,7 +31,7 @@ module desenha_eixo_cartesiano (
 
     reg [1:0] estado_atual, proximo_estado;
 
-    // Lógica sequencial do registrador de estados (disparada pelo p_tick ou clk do pixel)
+    // Lógica sequencial do registrador de estados
     always @(posedge clk or posedge btn_reset) begin
         if (btn_reset) begin
             estado_atual <= ST_BLANK;
@@ -48,7 +45,6 @@ module desenha_eixo_cartesiano (
         if (!area_visivel) begin
             proximo_estado = ST_BLANK;
         end else begin
-            // Se estiver na área visível, verifica se o pixel atual pertence ao eixo central
             if ((eixo_x == 320) || (eixo_y == 240)) begin
                 proximo_estado = ST_EIXO;
             end else begin
@@ -57,24 +53,22 @@ module desenha_eixo_cartesiano (
         end
     end
 
-    // 3. Lógica de Saída baseada no Estado Atual (Máquina de Estados de Moore)
-    // No seu código original, ~desenhar colocava branco onde NÃO era eixo e preto no eixo.
-    // Ou seja: Eixo = Preto (4'b0000), Fundo = Branco (4'b1111).
+    // 3. Lógica de Saída (Máquina de Moore invertida)
     reg [3:0] cor_r, cor_g, cor_b;
 
     always @(*) begin
         case (estado_atual)
             ST_EIXO: begin
-                // Desenho do eixo (Cor preta ou outra cor desejada)
-                cor_r = 4'b0000;
-                cor_g = 4'b0000;
-                cor_b = 4'b0000;
-            end
-            ST_FUNDO: begin
-                // Cor do fundo (Branco, conforme sua lógica original ~desenhar)
+                // Eixos em Branco
                 cor_r = 4'b1111;
                 cor_g = 4'b1111;
                 cor_b = 4'b1111;
+            end
+            ST_FUNDO: begin
+                // Fundo Escuro (Preto)
+                cor_r = 4'b0000;
+                cor_g = 4'b0000;
+                cor_b = 4'b0000;
             end
             default: begin	// ST_BLANK
                 // Fora da área visível (Blanking deve enviar preto)
