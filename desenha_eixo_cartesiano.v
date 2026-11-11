@@ -11,16 +11,16 @@ module desenha_eixo_cartesiano (
     wire area_visivel;
     wire p_tick;
 
-    // 1. Instância do "motor" VGA
+    // 1. Instância do gerador de sincronismo VGA
     vga_sync meu_vga (
-        .clk(clk), 
-        .reset(~btn_reset), 
-        .hsync(VGA_HS), 
-        .vsync(VGA_VS), 
+        .clk(clk),           
+        .reset(~btn_reset),   // Ajuste conforme a polaridade do botão da sua placa
+        .hsync(VGA_HS),      
+        .vsync(VGA_VS),      
         .video_on(area_visivel), 
-        .p_tick(p_tick), 
-        .x(eixo_x), 
-        .y(eixo_y)
+        .p_tick(p_tick),     
+        .x(eixo_x),          
+        .y(eixo_y)           
     );
 
     // 2. Definição dos Estados da FSM
@@ -31,21 +31,23 @@ module desenha_eixo_cartesiano (
 
     reg [1:0] estado_atual, proximo_estado;
 
-    // Lógica sequencial do registrador de estados
-    always @(posedge clk or posedge btn_reset) begin
-        if (btn_reset) begin
+    // 3. Bloco Sequencial da FSM (Rodando no clock principal da placa)
+    // Usamos o 'p_tick' como condição de enable para atualizar o estado apenas no momento exato do pixel.
+    always @(posedge clk or posedge ~btn_reset) begin
+        if (~btn_reset) begin
             estado_atual <= ST_BLANK;
-        end else begin
+        end else if (p_tick) begin
             estado_atual <= proximo_estado;
         end
     end
 
-    // Lógica combinacional de transição de estados da FSM
-    always @(*) begin
+    // 4. Lógica Combinacional de Transição de Estados (Automática)
+    always @* begin
         if (!area_visivel) begin
             proximo_estado = ST_BLANK;
         end else begin
-            if ((eixo_x == 320) || (eixo_y == 240)) begin
+            // Se estiver nas coordenadas centrais (X=320 ou Y=240), desenha o eixo
+            if ((eixo_x == 10'd320) || (eixo_y == 10'd240)) begin
                 proximo_estado = ST_EIXO;
             end else begin
                 proximo_estado = ST_FUNDO;
@@ -53,35 +55,35 @@ module desenha_eixo_cartesiano (
         end
     end
 
-    // 3. Lógica de Saída (Máquina de Moore invertida)
-    reg [3:0] cor_r, cor_g, cor_b;
+    // 5. Lógica de Saída (Máquina de Moore: Fundo Escuro / Eixos Brancos)
+    reg [3:0] r_reg, g_reg, b_reg;
 
-    always @(*) begin
+    always @* begin
         case (estado_atual)
             ST_EIXO: begin
-                // Eixos em Branco
-                cor_r = 4'b1111;
-                cor_g = 4'b1111;
-                cor_b = 4'b1111;
+                // Eixos em Branco Brilhante
+                r_reg = 4'b0000;
+                g_reg = 4'b0000;
+                b_reg = 4'b0000;
             end
             ST_FUNDO: begin
                 // Fundo Escuro (Preto)
-                cor_r = 4'b0000;
-                cor_g = 4'b0000;
-                cor_b = 4'b0000;
+                r_reg = 4'b1111;
+                g_reg = 4'b1111;
+                b_reg = 4'b1111;
             end
-            default: begin	// ST_BLANK
-                // Fora da área visível (Blanking deve enviar preto)
-                cor_r = 4'b0000;
-                cor_g = 4'b0000;
-                cor_b = 4'b0000;
+            default: begin // ST_BLANK
+                // Fora da área visível (obrigatório desligar os canais de cor)
+                r_reg = 4'b0000;
+                g_reg = 4'b0000;
+                b_reg = 4'b0000;
             end
         endcase
     end
 
-    // Atribuição final aos pinos de saída
-    assign VGA_R = cor_r;
-    assign VGA_G = cor_g;
-    assign VGA_B = cor_b;
+    // Atribuição final das cores para os pinos
+    assign VGA_R = r_reg;
+    assign VGA_G = g_reg;
+    assign VGA_B = b_reg;
 
 endmodule
