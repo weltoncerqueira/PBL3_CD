@@ -85,14 +85,15 @@ module integra_teste (
         .fim_x(fim_x_w)
     );
 
-    // 3. O transformador de coordenadas recebe o x gerado pelo contador sequencial
-    transformador_coordenadas trans_coord_vga (
-        .x(vga_x),
-        .x_cart(x_cart)
-    );
-	 
-	 // Extensão de sinal de x_cart (10 -> 11 bits)
-	 wire [10:0] x_cart_ext = {x_cart[9], x_cart};
+	// Próxima coluna da varredura (H_MAX = 799)
+	wire [9:0] x_prox = (vga_x == 10'd799) ? 10'd0 : (vga_x + 10'd1);
+
+	transformador_coordenadas trans_coord_vga (
+		 .x(x_prox),
+		 .x_cart(x_cart)       // x_prox - 320
+	);
+
+	wire [10:0] x_cart_ext = {x_cart[9], x_cart};
 
     // 4. Instancia o controlador VGA (periférico de exibição)[cite: 3]
     vga_sync u_vga (
@@ -137,8 +138,6 @@ module integra_teste (
     wire [17:0] Vy1, Vy2;
     wire ovf_v1, ovf_f1;
     wire ovf_v2, ovf_f2;
-    wire [29:0] y_func1, y_func2;
-    wire [19:0] y_deriv1, y_deriv2;
 	 
 
     // Cálculo de Vértices Função 1
@@ -163,42 +162,30 @@ module integra_teste (
         .err_v(ovf_v2)
     );
 	 
-    // Cálculo de Y - Função 1
-    calcula_y calcula_y1 (
-      .x(x_cart_ext), 
-      .a(reg_a1),
-      .b(reg_b1),
-      .c(reg_c1),
-      .overflow(),
-      .cout(),
-      .y(y_func1)
-    );
+	wire [29:0] y_func1_c, y_func2_c;
+	wire [19:0] y_deriv1_c, y_deriv2_c;
 
-    // Cálculo de Y - Função 2
-    calcula_y calcula_y2 (
-      .x(x_cart_ext), 
-      .a(reg_a2),
-      .b(reg_b2),
-      .c(reg_c2),
-      .overflow(),
-      .cout(),
-      .y(y_func2)
-    );
-	 
-    // Derivada - Função 1
-    calcula_y_linha derivada_1(
-		 .x(x_cart_ext),
-		 .a(reg_a1),
-		 .b(reg_b1),
-		 .y_linha(y_deriv1)
-	);
+	calcula_y calcula_y1 (.x(x_cart_ext), .a(reg_a1), .b(reg_b1), .c(reg_c1),
+								 .overflow(), .cout(), .y(y_func1_c));
+	calcula_y calcula_y2 (.x(x_cart_ext), .a(reg_a2), .b(reg_b2), .c(reg_c2),
+								 .overflow(), .cout(), .y(y_func2_c));
 
-    // Derivada - Função 2
-    calcula_y_linha derivada_2(
-		 .x(x_cart_ext),
-		 .a(reg_a2),
-		 .b(reg_b2),
-		 .y_linha(y_deriv2)
+	calcula_y_linha derivada_1 (.x(x_cart_ext), .a(reg_a1), .b(reg_b1), .y_linha(y_deriv1_c));
+	calcula_y_linha derivada_2 (.x(x_cart_ext), .a(reg_a2), .b(reg_b2), .y_linha(y_deriv2_c));
+	
+	
+	wire [29:0] y_func1, y_func2;
+	wire [19:0] y_deriv1, y_deriv2;
+
+	captura_y_fsm u_captura_y (
+		 .clk(clk),
+		 .rst(rst_interno),
+		 .p_tick(p_tick),
+		 .y_func1_c(y_func1_c),   .y_deriv1_c(y_deriv1_c),
+		 .y_func2_c(y_func2_c),   .y_deriv2_c(y_deriv2_c),
+		 .y_func1(y_func1),       .y_deriv1(y_deriv1),
+		 .y_func2(y_func2),       .y_deriv2(y_deriv2),
+		 .carrega()
 	);
 	
     // Fios para as cores do renderizador
@@ -210,86 +197,109 @@ module integra_teste (
 
     // 6. Instancia o módulo de renderização gráfica (Restaurado)
 	 renderizador_grafico u_render (
+		 .clk(clk),
+		 .rst(rst_interno),
 		 .video_on(video_on),
 		 .vga_x(vga_x),
 		 .vga_y(vga_y),
-		 .y_func1(y_func1),
-		 .y_deriv1(y_deriv1),
-		 .y_func2(y_func2),
-		 .y_deriv2(y_deriv2),
+		 .y_func1(y_func1),   .y_deriv1(y_deriv1),
+		 .y_func2(y_func2),   .y_deriv2(y_deriv2),
 		 .err_f1(err_f1_w),
 		 .err_f2(err_f2_w),
 		 .sistema_pronto(led_done),
-		 .vga_r(r_out),
-		 .vga_g(g_out),
-		 .vga_b(b_out)
-	);
+		 .vga_r(r_out), .vga_g(g_out), .vga_b(b_out)
+	 );
 	 
 endmodule
 
 
-
 module renderizador_grafico (
-    input wire video_on,
-    input wire [9:0] vga_x,
-    input wire [9:0] vga_y,
-    input wire [29:0] y_func1,
-	 input wire [19:0] y_deriv1,
-	 input wire [29:0] y_func2,
-	 input wire [19:0] y_deriv2,
-    input wire err_f1,
-    input wire err_f2,
-    input wire sistema_pronto,
-    output reg [3:0] vga_r,
-    output reg [3:0] vga_g,
-    output reg [3:0] vga_b
+    input  wire        clk,
+    input  wire        rst,          // ativo em alto (ligar em rst_interno)
+    input  wire        video_on,
+    input  wire [9:0]  vga_x,
+    input  wire [9:0]  vga_y,
+    input  wire [29:0] y_func1,
+    input  wire [19:0] y_deriv1,
+    input  wire [29:0] y_func2,
+    input  wire [19:0] y_deriv2,
+    input  wire        err_f1,
+    input  wire        err_f2,
+    input  wire        sistema_pronto,
+    output reg  [3:0]  vga_r,
+    output reg  [3:0]  vga_g,
+    output reg  [3:0]  vga_b
 );
 
-    // 1. Eixos cartesianos (cruzam em 320, 240)
+    // ------------------------------------------------------------------
+    // Datapath: eixos, conversão y -> linha da tela (240 - y) e traçado
+    // ------------------------------------------------------------------
     wire hit_eixos = (vga_x == 10'd320) || (vga_y == 10'd240);
 
-    // 2. Y cartesiano (complemento de dois) -> linha da tela: linha = 240 - y
-    //    Extensão de sinal para 26 bits, usando o valor completo (sem truncar).
-	wire signed [31:0] y_f1_ext = {{2{y_func1[29]}},   y_func1};
-	wire signed [31:0] y_d1_ext = {{12{y_deriv1[19]}}, y_deriv1};
-	wire signed [31:0] y_f2_ext = {{2{y_func2[29]}},   y_func2};
-	wire signed [31:0] y_d2_ext = {{12{y_deriv2[19]}}, y_deriv2};
+    wire signed [31:0] y_f1_ext = {{2{y_func1[29]}},   y_func1};
+    wire signed [31:0] y_d1_ext = {{12{y_deriv1[19]}}, y_deriv1};
+    wire signed [31:0] y_f2_ext = {{2{y_func2[29]}},   y_func2};
+    wire signed [31:0] y_d2_ext = {{12{y_deriv2[19]}}, y_deriv2};
 
+    wire signed [31:0] ys_f1 = 32'sd240 - y_f1_ext;
+    wire signed [31:0] ys_d1 = 32'sd240 - y_d1_ext;
+    wire signed [31:0] ys_f2 = 32'sd240 - y_f2_ext;
+    wire signed [31:0] ys_d2 = 32'sd240 - y_d2_ext;
 
-	wire signed [31:0] ys_f1 = 32'sd240 - y_f1_ext;
-	wire signed [31:0] ys_d1 = 32'sd240 - y_d1_ext;
-	wire signed [31:0] ys_f2 = 32'sd240 - y_f2_ext;
-	wire signed [31:0] ys_d2 = 32'sd240 - y_d2_ext;
+    wire hit_parabola1, hit_derivada1, hit_parabola2, hit_derivada2;
 
-    // 3. Clipping: só desenha se a linha estiver em 0..479
-	wire ok_f1 = (ys_f1 >= 32'sd0) && (ys_f1 < 32'sd480);
-	wire ok_d1 = (ys_d1 >= 32'sd0) && (ys_d1 < 32'sd480);
-	wire ok_f2 = (ys_f2 >= 32'sd0) && (ys_f2 < 32'sd480);
-	wire ok_d2 = (ys_d2 >= 32'sd0) && (ys_d2 < 32'sd480);
+    traco_curva t_f1 (.clk(clk), .vga_x(vga_x), .vga_y(vga_y), .ys(ys_f1),
+                      .en(sistema_pronto && !err_f1), .hit(hit_parabola1));
+    traco_curva t_d1 (.clk(clk), .vga_x(vga_x), .vga_y(vga_y), .ys(ys_d1),
+                      .en(sistema_pronto && !err_f1), .hit(hit_derivada1));
+    traco_curva t_f2 (.clk(clk), .vga_x(vga_x), .vga_y(vga_y), .ys(ys_f2),
+                      .en(sistema_pronto && !err_f2), .hit(hit_parabola2));
+    traco_curva t_d2 (.clk(clk), .vga_x(vga_x), .vga_y(vga_y), .ys(ys_d2),
+                      .en(sistema_pronto && !err_f2), .hit(hit_derivada2));
 
-    // 4. Acerto de pixel de cada curva
-    wire hit_parabola1 = sistema_pronto && !err_f1 && ok_f1 && (vga_y == ys_f1[9:0]);
-    wire hit_derivada1 = sistema_pronto && !err_f1 && ok_d1 && (vga_y == ys_d1[9:0]);
-    wire hit_parabola2 = sistema_pronto && !err_f2 && ok_f2 && (vga_y == ys_f2[9:0]);
-    wire hit_derivada2 = sistema_pronto && !err_f2 && ok_d2 && (vga_y == ys_d2[9:0]);
+    // ------------------------------------------------------------------
+    // FSM de cor (Moore): um estado por cor
+    // ------------------------------------------------------------------
+    localparam [2:0]
+        ST_BLANK = 3'd0,   // fora da área visível -> preto
+        ST_P1    = 3'd1,   // parábola 1  -> vermelho
+        ST_D1    = 3'd2,   // derivada 1  -> laranja
+        ST_P2    = 3'd3,   // parábola 2  -> verde
+        ST_D2    = 3'd4,   // derivada 2  -> ciano
+        ST_EIXO  = 3'd5,   // eixos       -> preto
+        ST_FUNDO = 3'd6;   // fundo       -> branco
 
-    // 5. Prioridade das cores
+    reg [2:0] estado, proximo;
+
+    // Registrador de estado
+    always @(posedge clk or posedge rst) begin
+        if (rst) estado <= ST_BLANK;
+        else     estado <= proximo;
+    end
+
+    // Lógica de próximo estado (prioridade: P1 > D1 > P2 > D2 > eixos > fundo)
     always @(*) begin
-        if (!video_on) begin
-            vga_r = 4'h0; vga_g = 4'h0; vga_b = 4'h0; // blanking -> preto
-        end else if (hit_parabola1) begin
-            vga_r = 4'hF; vga_g = 4'h0; vga_b = 4'h0; // Vermelho (Parábola 1)
-        end else if (hit_derivada1) begin
-            vga_r = 4'hF; vga_g = 4'hA; vga_b = 4'h0; // Laranja (Derivada 1)
-        end else if (hit_parabola2) begin
-            vga_r = 4'h0; vga_g = 4'hF; vga_b = 4'h0; // Verde (Parábola 2)
-        end else if (hit_derivada2) begin
-            vga_r = 4'h0; vga_g = 4'hF; vga_b = 4'hF; // Ciano (Derivada 2)
-        end else if (hit_eixos) begin
-            vga_r = 4'h0; vga_g = 4'h0; vga_b = 4'h0; // Eixos em preto
-        end else begin
-            vga_r = 4'hF; vga_g = 4'hF; vga_b = 4'hF; // Fundo branco
-        end
+        if      (!video_on)      proximo = ST_BLANK;
+        else if (hit_parabola1)  proximo = ST_P1;
+        else if (hit_derivada1)  proximo = ST_D1;
+        else if (hit_parabola2)  proximo = ST_P2;
+        else if (hit_derivada2)  proximo = ST_D2;
+        else if (hit_eixos)      proximo = ST_EIXO;
+        else                     proximo = ST_FUNDO;
+    end
+
+    // Saídas (Moore): dependem apenas do estado
+    always @(*) begin
+        case (estado)
+            ST_BLANK: begin vga_r = 4'h0; vga_g = 4'h0; vga_b = 4'h0; end
+            ST_P1:    begin vga_r = 4'hF; vga_g = 4'h0; vga_b = 4'h0; end // Vermelho (funçao 1)
+            ST_D1:    begin vga_r = 4'hF; vga_g = 4'hF; vga_b = 4'h0; end // Amarelo (Derivada 1)
+            ST_P2:    begin vga_r = 4'h0; vga_g = 4'hF; vga_b = 4'h0; end 
+            ST_D2:    begin vga_r = 4'h0; vga_g = 4'hF; vga_b = 4'hF; end // ciano (derivada 2)
+            ST_EIXO:  begin vga_r = 4'h0; vga_g = 4'h0; vga_b = 4'h0; end
+            ST_FUNDO: begin vga_r = 4'hF; vga_g = 4'hF; vga_b = 4'hF; end // fundo branco
+            default:  begin vga_r = 4'h0; vga_g = 4'h0; vga_b = 4'h0; end
+        endcase
     end
 
 endmodule
@@ -322,6 +332,7 @@ module contador_x (
     assign fim_x = (x == 10'd639);
 
 endmodule
+
 
 module transformador_coordenadas (
     input wire [9:0] x,
@@ -439,3 +450,62 @@ module traco_curva (
     assign hit = en && !fora && (vga_y >= lo) && (vga_y <= hi);
 endmodule
 
+
+
+// FSM que sincroniza a captura dos valores de y com o avanço do pixel da VGA.
+// ESPERA  : ciclo em que p_tick = 0 (os cálculos combinacionais estabilizam)
+// CAPTURA : ciclo em que p_tick = 1 (vga_x avança; os registradores carregam)
+module captura_y_fsm (
+    input  wire        clk,
+    input  wire        rst,        // ativo em alto
+    input  wire        p_tick,     // tick de pixel do vga_sync
+    input  wire [29:0] y_func1_c,
+    input  wire [19:0] y_deriv1_c,
+    input  wire [29:0] y_func2_c,
+    input  wire [19:0] y_deriv2_c,
+    output reg  [29:0] y_func1,
+    output reg  [19:0] y_deriv1,
+    output reg  [29:0] y_func2,
+    output reg  [19:0] y_deriv2,
+    output wire        carrega     // útil para depuração/simulação
+);
+
+    localparam ESPERA  = 1'b0,
+               CAPTURA = 1'b1;
+
+    reg estado, proximo;
+
+    // Registrador de estado
+    always @(posedge clk or posedge rst) begin
+        if (rst) estado <= ESPERA;
+        else     estado <= proximo;
+    end
+
+    // Próximo estado: p_tick = 0 indica que o próximo ciclo terá p_tick = 1
+    always @(*) begin
+        case (estado)
+            ESPERA:  proximo = (p_tick == 1'b0) ? CAPTURA : ESPERA;
+            CAPTURA: proximo = ESPERA;
+            default: proximo = ESPERA;
+        endcase
+    end
+
+    // Saída de Moore
+    assign carrega = (estado == CAPTURA);
+
+    // Registradores de dados, carregados apenas em CAPTURA
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            y_func1  <= 30'd0;
+            y_func2  <= 30'd0;
+            y_deriv1 <= 20'd0;
+            y_deriv2 <= 20'd0;
+        end else if (carrega) begin
+            y_func1  <= y_func1_c;
+            y_func2  <= y_func2_c;
+            y_deriv1 <= y_deriv1_c;
+            y_deriv2 <= y_deriv2_c;
+        end
+    end
+
+endmodule
