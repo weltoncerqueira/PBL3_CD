@@ -127,11 +127,7 @@ module maquina_central (
                 end
 
                 CALCULA_VERTICE: begin
-                    led_busy       <= 1'b1; 
-                    if (ovf_v1_in) err_v1 <= 1'b1;
-                    if (ovf_v2_in) err_v2 <= 1'b1;
-                    if (ovf_f1_in) err_f1 <= 1'b1;
-                    if (ovf_f2_in) err_f2 <= 1'b1;
+                    led_busy       <= 1'b1;
                 end
 
                 DES_EIXOS: begin
