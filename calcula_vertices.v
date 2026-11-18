@@ -80,9 +80,10 @@ module vertice_x (
     output [8:0] Vx
 );
 
-    wire [8:0] b_ext;       // b com sinal estendido
-    wire [8:0] b_neg;       // -b em 9 bits (sem overflow para b = -128)
-    wire [8:0] produto;     // 2a
+    wire [8:0]  b_ext;       // b com sinal estendido
+    wire [8:0]  b_neg;       // -b em 9 bits (sem overflow para b = -128)
+    wire [15:0] produto_16;  // Saída real do multiplicador 8x8 (16 bits)
+    wire [8:0]  produto;     // 2a ajustado para 9 bits
 
     // Extensão de sinal: 8 bits -> 9 bits
     assign b_ext = {b[7], b};
@@ -94,12 +95,16 @@ module vertice_x (
         .out(b_neg)
     );
 
-    // 2a
+    // 2a (Agora conectado ao fio de 16 bits correspondente à porta S do módulo)
     multiplicador_8x8_sinalizado multp_1 (
         .A(a),
         .B(8'sd2),
-        .S(produto)         // confira a largura real da saída do seu módulo
+        .S(produto_16)         
     );
+
+    // Como 2 * a (com 'a' de 8 bits) cabe em 9 bits com sinal, 
+    // pegamos os 9 bits menos significativos de forma segura.
+    assign produto = produto_16[8:0];
 
     // (-b) / (2a)
     divisor_9x9_sinalizado div_1 (
@@ -120,6 +125,7 @@ module vertice_y (
 );
 
     wire [17:0] delta_neg;
+    wire [15:0] produto_16; // Saída real de 16 bits do multiplicador
     wire [9:0]  produto;        
     wire [17:0] produto_ext;   
 
@@ -130,14 +136,17 @@ module vertice_y (
         .out(delta_neg)
     );
 
-    // 4a
+    // 4a (Conectado à largura real de 16 bits)
     multiplicador_8x8_sinalizado multp_1 (
         .A(a),
         .B(8'sd4),
-        .S(produto)             // confira a largura real da saída do seu módulo
+        .S(produto_16)         
     );
 
-    // Extensão de sinal: 10 bits -> 18 bits
+    // Como 4*a cabe em 10 bits com sinal, extraímos a fatia de 0 a 9 de forma segura
+    assign produto = produto_16[9:0];
+
+    // Extensão de sinal: 10 bits -> 18 bits para o divisor
     assign produto_ext = {{8{produto[9]}}, produto};
 
     // (-delta) / (4a)

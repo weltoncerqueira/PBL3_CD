@@ -9,7 +9,7 @@ module maquina_central (
     input ovf_f2_in,
     // Entrada para o ciclo CALCULA_PONTOS <-> REG_BUSY
     input reg_full,
-    input fim_x,             // Adicionado: sinaliza que o contador chegou a 639 (Requisito 7)[cite: 2]
+    input fim_x,             
     
     // Saídas de erro
     output reg err_v1,
@@ -17,14 +17,17 @@ module maquina_central (
     output reg err_f1,
     output reg err_f2,
     
-    // Saídas de controle do sistema/desenho e status (Requisito 15)[cite: 2]
-    output reg ativar_desenho,   // Ativa o módulo de desenho dos eixos
-    output reg desenho_pronto,   // Indica que o desenho já foi feito
-    output reg led_busy,         // LED indicador de ocupado/processamento
-    output reg led_done          // LED indicador de conclusão
+    // Saídas de controle do sistema/desenho e status
+    output reg ativar_desenho,   
+    output reg desenho_pronto,   
+    output reg led_busy,         
+    output reg led_done,          
+    
+    // Saída para expor o estado atual ao controlador do contador
+    output [2:0] estado_atual_out
 );
 
-    // Codificação dos Estados da FSM (Incluído o estado CONCLUIDO)
+    // Codificação dos Estados da FSM
     localparam [2:0] 
         INICIO           = 3'b000,
         CALCULA_VERTICE  = 3'b001,
@@ -34,6 +37,9 @@ module maquina_central (
         CONCLUIDO        = 3'b101;
 
     reg [2:0] estado_atual, proximo_estado;
+
+    // Atribuição contínua do estado atual para a saída
+    assign estado_atual_out = estado_atual;
 
     // 1. Registrador de Estado (Síncrono)
     always @(posedge clk or posedge reset) begin
@@ -67,7 +73,7 @@ module maquina_central (
                 if (reg_full == 1'b1)
                     proximo_estado = REG_BUSY;
                 else if (fim_x == 1'b1)
-                    proximo_estado = CONCLUIDO; // Encerra o loop ao atingir os 640 pontos
+                    proximo_estado = CONCLUIDO; 
                 else
                     proximo_estado = CALCULA_PONTOS;
             end
@@ -84,7 +90,6 @@ module maquina_central (
             end
 
             CONCLUIDO: begin
-                // Fica em CONCLUIDO até receber um novo comando ou reset
                 if (sel_d == 1'b0)
                     proximo_estado = CONCLUIDO;
                 else
@@ -122,8 +127,7 @@ module maquina_central (
                 end
 
                 CALCULA_VERTICE: begin
-                    led_busy       <= 1'b1; // Ativa o LED de ocupado[cite: 2]
-                    // Se qualquer entrada de overflow for 1, trava a respectiva flag de erro em 1
+                    led_busy       <= 1'b1; 
                     if (ovf_v1_in) err_v1 <= 1'b1;
                     if (ovf_v2_in) err_v2 <= 1'b1;
                     if (ovf_f1_in) err_f1 <= 1'b1;
@@ -131,23 +135,23 @@ module maquina_central (
                 end
 
                 DES_EIXOS: begin
-                    ativar_desenho <= 1'b1; // Ativa o módulo de desenho dos eixos
-                    desenho_pronto <= 1'b1; // Sinaliza que o processo de desenho foi concluído
+                    ativar_desenho <= 1'b1; 
+                    desenho_pronto <= 1'b1; 
                     led_busy       <= 1'b1;
                 end
 
                 CALCULA_PONTOS: begin
-                    ativar_desenho <= 1'b0; // Desativa o sinal de disparo do desenho
+                    ativar_desenho <= 1'b0; 
                     led_busy       <= 1'b1;
                 end
 
                 REG_BUSY: begin
-                    led_busy       <= 1'b1; // Mantém ocupado enquanto aguarda o buffer
+                    led_busy       <= 1'b1; 
                 end
 
                 CONCLUIDO: begin
-                    led_busy       <= 1'b0; // Desliga o BUSY
-                    led_done       <= 1'b1; // Liga o LED de conclusão (DONE)[cite: 2]
+                    led_busy       <= 1'b0; 
+                    led_done       <= 1'b1;
                 end
             endcase
         end

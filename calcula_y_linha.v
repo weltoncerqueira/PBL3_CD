@@ -11,12 +11,9 @@ module calcula_y_linha (
     wire [19:0] b_ext;    // b estendido para 20 bits
     wire        ovf1;
     
-    // 1. Cálculo de 2a (8 bits x 2 bits fixos -> 9 bits)
-    multiplicador_8x8_sinalizado multp_1 (
-        .A(a),
-        .B(2'b10),
-        .S(produto1)
-    );
+	 // 1. Cálculo de 2a: Multiplicar por 2 em complemento de dois equivale 
+    // a deslocar 1 bit à esquerda e preencher o LSB com 0.
+    assign produto1 = {a, 1'b0};
      
     // 2. Cálculo de 2ax (9 bits x 11 bits -> 20 bits)
     multiplicador_9x11_sinalizado multp_2 (

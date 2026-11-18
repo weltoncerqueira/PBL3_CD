@@ -31,9 +31,8 @@ module desenha_eixo_cartesiano (
 
     reg [1:0] estado_atual, proximo_estado;
 
-    // 3. Bloco Sequencial da FSM (Rodando no clock principal da placa)
-    // Usamos o 'p_tick' como condição de enable para atualizar o estado apenas no momento exato do pixel.
-    always @(posedge clk or posedge ~btn_reset) begin
+    // 3. Bloco Sequencial da FSM corrigido (usando negedge para botão ativo em nível baixo)
+    always @(posedge clk or negedge btn_reset) begin
         if (~btn_reset) begin
             estado_atual <= ST_BLANK;
         end else if (p_tick) begin
