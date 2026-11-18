@@ -9,6 +9,7 @@ module integra_teste (
 
     wire [7:0] reg_a1, reg_b1, reg_c1;
 	 wire [7:0] reg_a2, reg_b2, reg_c2;
+	 wire [23:0] y1, y2;
     wire [2:0] count;
 	 
     wire botao_pulse; 
@@ -48,7 +49,15 @@ module integra_teste (
     registrador_8b reg8_b22 (.D(sw), .enable(sel_abc[4]), .rst(rst_interno), .clk(clk), .S(reg_b2));
     registrador_8b reg8_c23 (.D(sw), .enable(sel_abc[5]), .rst(rst_interno), .clk(clk), .S(reg_c2));
 	 
-	 wire [23:0] y1, y2;
+	 wire [9:0] cont_x;
+	 contador_fsm cont_320(
+		 .clk(clk),
+		 .rst(rst_interno),    // reset assíncrono, ativo em alto
+		 .start(sel_abc[6]),  // inicia a contagem
+		 .contagem(cont_x),
+		 .fase(),     			// 0 = contando até -320, 1 = contando até +320
+		 .done()      			// 1 quando as duas contagens terminaram
+	 );
 	 
 	 calcula_y calcula_y1 (
       .x(sw),
@@ -60,7 +69,6 @@ module integra_teste (
       .y(y1)
     );
 	 
-	 
 	 calcula_y calcula_y2 (
       .x(sw),
       .a(reg_a2),
@@ -71,6 +79,31 @@ module integra_teste (
       .y(y2)
     );
 	 
+	 wire [8:0]  Vx;
+    wire [17:0] Vy;
+    wire ovf_a0, ovf_v;
+
+	calcula_vertices (
+    .a(a),
+    .b(b),
+    .delta(),
+    .Vx(Vx),
+    .Vy(Vy),
+    .err_a0(ovf_a0),
+    .err_v(ovf_v)
+);
+	 
+	 
+	 
 	
 	 
+	 
+	 
 endmodule
+
+
+
+
+
+
+

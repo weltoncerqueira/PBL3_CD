@@ -16,21 +16,21 @@ module calcula_y (
     
     wire ovf1, ovf2;
 
-    // 1. x² (11x11 -> 22 bits)
+    // x² (11x11 -> 22 bits)
     multiplicador_11x11_sinalizado multp_1 (
         .A(x),
         .B(x),
         .S(produto1)
     );
      
-    // 2. a * x² (8x22 -> 30 bits)
+    // a * x² (8x22 -> 30 bits)
     multiplicador_8x22_sinalizado multp_2 (
         .A(a),
         .B(produto1),
         .S(produto2)
     );
      
-    // 3. b * x (8x11 -> 19 bits)
+    // b * x (8x11 -> 19 bits)
     multiplicador_8x11_sinalizado multp_3 (
         .A(b),
         .B(x),
@@ -114,7 +114,7 @@ module calcula_y (
     buf (c_ext[28], c[7]);
     buf (c_ext[29], c[7]);
 
-    // 4. (ax²) + (bx)
+    // (ax²) + (bx)
     somador_30b soma30_1 (
         .A(produto2),
         .B(produto3_ext),
@@ -124,7 +124,7 @@ module calcula_y (
         .overflow(ovf1)
     );
 
-    // 5. y = (ax² + bx) + c
+    // y = (ax² + bx) + c
     somador_30b soma30_2 (
         .A(soma1),
         .B(c_ext),
